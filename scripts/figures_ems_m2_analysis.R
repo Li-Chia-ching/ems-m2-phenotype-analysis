@@ -17,7 +17,7 @@
 
 # ── 0. Package Setup ─────────────────────────────────────────────────────────
 # Ensure user library is in path (for scico installed outside system library)
-user_lib <- "C:/Users/lijia/Documents/R/win-library/4.6"
+user_lib <- "C:/Users/.../R/win-library/4.6"
 if (dir.exists(user_lib)) .libPaths(c(user_lib, .libPaths()))
 
 packages <- c("dplyr", "tidyr", "ggplot2", "readr", "broom", "forcats",
@@ -63,7 +63,7 @@ pub_theme <- theme_bw(base_size = base_font_size, base_family = "sans") +
   )
 
 # Paths
-project_root <- "C:/Users/lijia/Documents/R Workplace/Lei_Thesis/Lei_EMS"
+project_root <- "C:/Users/..."
 out_dir <- file.path(project_root, "03_Outputs_and_Figures")
 cleaned_data_path <- file.path(out_dir, "Cleaned_Data", "EMS_M2_Cleaned_1425plants.csv")
 sheet1_path <- file.path(project_root, "01_Raw_Data", "Archived", "EMS_M2_MP2603V2_Sheet1.csv")
