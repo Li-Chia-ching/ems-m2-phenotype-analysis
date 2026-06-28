@@ -1,0 +1,34 @@
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Python cache
+# =========================
+__pycache__/
+*.pyc
+*.pyo
+
+# =========================
+# R session files
+# =========================
+.Rhistory
+.RData
+.Rproj.user/
+
+# =========================
+# Output files (recommended for publication repo)
+# =========================
+outputs/figures/*.pdf
+outputs/tables/*.csv
+
+# optional: if data is large or sensitive
+data/raw/
+
+# =========================
+# IDE files
+# =========================
+.vscode/
+.idea/
