@@ -16,8 +16,8 @@ from statsmodels.stats.multitest import multipletests
 import os
 
 # ── 1. Load data ───────────────────────────────────────────────────────────
-input_path = r"C:\Users\lijia\Documents\R Workplace\Lei_Thesis\Lei_EMS\03_Outputs_and_Figures\Cleaned_Data\EMS_M2_Cleaned_1425plants.csv"
-output_path = r"C:\Users\lijia\Documents\R Workplace\Lei_Thesis\Lei_EMS\03_Outputs_and_Figures\Supplementary Table S2.csv"
+input_path = r"C:\Users\...\03_Outputs_and_Figures\Cleaned_Data\EMS_M2_Cleaned_1425plants.csv"
+output_path = r"C:\Users\...\03_Outputs_and_Figures\Supplementary Table S2.csv"
 
 df = pd.read_csv(input_path)
 print(f"Loaded: {input_path}")
