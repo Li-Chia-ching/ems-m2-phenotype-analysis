@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+ - family-names: "Li"
+   given-names: "Jiaqing"
+   orcid: "https://orcid.org/0000-0002-4856-5524"
+ - family-names: "Lei"
+   given-names: "Huanwei"
+   orcid: "https://orcid.org/0009-0007-4062-5987"
+title: "ems-m2-phenotype-analysis"
+version: 1.0.0
+doi: 10.5281/zenodo.21032869
+date-released: 2026-06-29
+url: "https://github.com/Li-Chia-ching/ems-m2-phenotype-analysis"
