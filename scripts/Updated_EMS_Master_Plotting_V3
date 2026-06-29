@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
 # =============================================================================
-# EMS Mutagenesis — Master Plotting Pipeline (Python V3 — Public Release)
-# Publication-ready, environment-agnostic implementation
+# EMS Mutagenesis — Updated Master Plotting Script (Python) — Publication-Ready
 # =============================================================================
 
-import os
-import warnings
-from pathlib import Path
-
+import os, sys, warnings
 import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit
@@ -15,40 +11,55 @@ from scipy.optimize import curve_fit
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib import rcParams
+import matplotlib.ticker as mticker
 import seaborn as sns
 
 warnings.filterwarnings('ignore')
 
-# =============================================================================
-# 0. PROJECT CONFIGURATION (NO PERSONAL PATHS)
-# =============================================================================
+# ══════════════════════════════════════════════════════════════════════════════
+# 0. GLOBAL CONFIGURATION — 动态相对路径配置
+# ══════════════════════════════════════════════════════════════════════════════
 
-# Resolve project root relative to script location
-SCRIPT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = SCRIPT_DIR.parent if SCRIPT_DIR.name == "scripts" else SCRIPT_DIR
+# 使用相对路径，假设当前工作目录在项目根目录
+PROJECT_ROOT = "." 
+UPDATED_DATA_DIR = os.path.join(PROJECT_ROOT, "03_Outputs_and_Figures", "Updated_Data")
+SHEET1_PATH = os.path.join(PROJECT_ROOT, "01_Raw_Data", "Archived", "EMS_M2_MP2603V2_Sheet1.csv")
+OUT_DIR = os.path.join(PROJECT_ROOT, "03_Outputs_and_Figures")
+os.makedirs(OUT_DIR, exist_ok=True)
 
-DATA_DIR = PROJECT_ROOT / "data"
-OUTPUT_DIR = PROJECT_ROOT / "outputs"
-
-FIG_DIR = OUTPUT_DIR / "figures"
-TABLE_DIR = OUTPUT_DIR / "tables"
-
-FIG_DIR.mkdir(parents=True, exist_ok=True)
-TABLE_DIR.mkdir(parents=True, exist_ok=True)
-
-# =============================================================================
-# GLOBAL STYLING
-# =============================================================================
-
+# --- Seaborn theme: clean, paper-quality ---
 sns.set_theme(style="ticks", context="paper", font_scale=1.15)
 
-COLOR = {
-    "blue": "#2b7bba",
-    "orange": "#d95f02",
-    "green": "#1b9e77",
-    "dark": "#2d3436",
-    "grey": "#636e72"
+# --- Custom Academic Palette ---
+CLR = {
+    'blue':     '#2b7bba', 'orange':   '#d95f02', 'green':    '#1b9e77',
+    'dark':     '#2d3436', 'grey':     '#636e72', 'light_bg': '#F8F9FA',
+    'border':   '#DEE2E6', 'faint':    '#dfe6e9',
 }
+
+# --- Matplotlib math rendering configuration ---
+rcParams.update({
+    'font.family':       'sans-serif',
+    'font.sans-serif':   ['Arial'],
+    'mathtext.fontset':  'stix',
+    'axes.unicode_minus': False,
+    'figure.dpi':        150,
+    'savefig.dpi':       300,
+    'savefig.bbox':      'tight',
+    'savefig.pad_inches': 0.08,
+    'pdf.fonttype':      42,
+    'ps.fonttype':       42,
+    'xtick.direction':   'in',
+    'ytick.direction':   'in',
+})
+
+N_TOTAL = 1424
+
+ANNO_BOX = dict(
+    boxstyle='round,pad=0.5', facecolor=CLR['light_bg'], edgecolor=CLR['border'],
+    alpha=0.92, linewidth=0.6,
+)
 
 # =============================================================================
 # DATA LOADING
