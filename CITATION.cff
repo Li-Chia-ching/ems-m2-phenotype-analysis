@@ -8,7 +8,7 @@ authors:
    given-names: "Huanwei"
    orcid: "https://orcid.org/0009-0007-4062-5987"
 title: "ems-m2-phenotype-analysis"
-version: 1.0.0
-doi: 10.5281/zenodo.21032869
+version: 2.0.0
+doi: 10.5281/zenodo.21038929
 date-released: 2026-06-29
 url: "https://github.com/Li-Chia-ching/ems-m2-phenotype-analysis"
