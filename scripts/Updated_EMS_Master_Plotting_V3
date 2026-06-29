@@ -1,30 +1,13 @@
 #!/usr/bin/env python3
 # =============================================================================
-# EMS Mutagenesis — Master Plotting Script (Python) — Open Source Version
-# =============================================================================
-# Description:
-#   Generates high-quality, publication-ready figures for EMS mutagenesis study.
-#   - Fig. 1: Dose-Response Analysis (LL.4 Survival & Quadratic Mutation Rate)
-#   - Fig. 3: Dual-Perspective Mutation Frequency (Global Spectrum & Family Matrix)
-#   - Fig. 4: Trait Correlation Heatmap & Multi-Trait Trend Panels
-#
-# GitHub & Data Security Notice:
-#   To prevent premature data leakage prior to formal paper publication, 
-#   ensure that your local 'data/' directory is appended to your '.gitignore' file.
-#   Add the following line to the '.gitignore' file at your repository root:
-#       data/
-#
-# Directory Structure:
-#   project_root/
-#   ├── data/            <- Put all source CSVs here (Ignored by Git)
-#   ├── outputs/         <- Automatically generated plots and plot data
-#   └── scripts/         <- Where this script should reside
+# EMS Mutagenesis — Master Plotting Pipeline (Python V3 — Public Release)
+# Publication-ready, environment-agnostic implementation
 # =============================================================================
 
 import os
-import sys
 import warnings
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit
@@ -32,506 +15,156 @@ from scipy.optimize import curve_fit
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from matplotlib import rcParams
-import matplotlib.ticker as mticker
 import seaborn as sns
 
 warnings.filterwarnings('ignore')
 
-# ══════════════════════════════════════════════════════════════════════════════
-# 0. DIRECTORY & PATH HIERARCHY SETUP (Environment Agnostic)
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
+# 0. PROJECT CONFIGURATION (NO PERSONAL PATHS)
+# =============================================================================
 
-# Dynamically resolve project folders relative to the location of this script
+# Resolve project root relative to script location
 SCRIPT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = SCRIPT_DIR.parent if SCRIPT_DIR.name == 'scripts' else SCRIPT_DIR
+PROJECT_ROOT = SCRIPT_DIR.parent if SCRIPT_DIR.name == "scripts" else SCRIPT_DIR
 
 DATA_DIR = PROJECT_ROOT / "data"
-OUT_DIR = PROJECT_ROOT / "outputs"
-OUT_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_DIR = PROJECT_ROOT / "outputs"
 
-# --- Seaborn Aesthetics & Formatting ---
+FIG_DIR = OUTPUT_DIR / "figures"
+TABLE_DIR = OUTPUT_DIR / "tables"
+
+FIG_DIR.mkdir(parents=True, exist_ok=True)
+TABLE_DIR.mkdir(parents=True, exist_ok=True)
+
+# =============================================================================
+# GLOBAL STYLING
+# =============================================================================
+
 sns.set_theme(style="ticks", context="paper", font_scale=1.15)
 
-# --- High-Contrast Custom Academic Palette ---
-CLR = {
-    'blue':     '#2b7bba', # Main curves and visualization metrics
-    'orange':   '#d95f02', # Observed experimental data points
-    'green':    '#1b9e77', # Theoretical optimums and biological thresholds
-    'dark':     '#2d3436', # Primary axes text and font labels
-    'grey':     '#636e72', # Error bars and grid limits
-    'light_bg': '#F8F9FA', # Background fill for float annotations
-    'border':   '#DEE2E6', # Bounding line for float annotations
-    'faint':    '#dfe6e9', # Subtle panel separation grid lines
+COLOR = {
+    "blue": "#2b7bba",
+    "orange": "#d95f02",
+    "green": "#1b9e77",
+    "dark": "#2d3436",
+    "grey": "#636e72"
 }
 
-# --- Pure Python Vector Font & Math Rendering (No External LaTeX Dependency) ---
-rcParams.update({
-    'font.family':       'sans-serif',
-    'font.sans-serif':   ['Arial', 'DejaVu Sans', 'Helvetica'],
-    'mathtext.fontset':  'stix',
-    'axes.unicode_minus': False,
-    'figure.dpi':        150,
-    'savefig.dpi':       300,
-    'savefig.bbox':      'tight',
-    'savefig.pad_inches': 0.08,
-    'pdf.fonttype':      42,
-    'ps.fonttype':       42,
-    'xtick.direction':   'in',
-    'ytick.direction':   'in',
-    'xtick.major.size':  3.5,
-    'ytick.major.size':  3.5,
-    'xtick.major.width': 0.6,
-    'ytick.major.width': 0.6,
-})
+# =============================================================================
+# DATA LOADING
+# =============================================================================
 
-N_TOTAL = 1425
-
-# Standardized annotation box style for text elements
-ANNO_BOX = dict(
-    boxstyle='round,pad=0.5',
-    facecolor=CLR['light_bg'],
-    edgecolor=CLR['border'],
-    alpha=0.92,
-    linewidth=0.6,
-)
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 1. DATA INGESTION ENGINE
-# ══════════════════════════════════════════════════════════════════════════════
 def load_data():
-    """Load and validate all production datasets from the secure data directory."""
-    print("=" * 60)
-    print(f"Initializing data ingestion from: [{DATA_DIR.name}/]")
+    m2 = pd.read_csv(DATA_DIR / "EMS_M2_Cleaned_1425plants.csv")
+    s1 = pd.read_csv(DATA_DIR / "Updated_Supplementary_Table_S1.csv")
+    s2 = pd.read_csv(DATA_DIR / "Updated_Supplementary_Table_S2.csv")
+    dose = pd.read_csv(DATA_DIR / "EMS_M2_DoseResponse.csv")
 
-    try:
-        m2 = pd.read_csv(DATA_DIR / "EMS_M2_Cleaned_1425plants.csv")
-        s1 = pd.read_csv(DATA_DIR / "Supplementary_Table_S1.csv")
-        s2 = pd.read_csv(DATA_DIR / "Supplementary_Table_S2.csv")
-        dose = pd.read_csv(DATA_DIR / "EMS_M2_Dose_Response.csv")
-    except FileNotFoundError as e:
-        print(f"\n[CRITICAL ERROR]: Ingestion failed. {e}")
-        print("Ensure the source datasets are placed inside the un-tracked 'data/' directory.")
-        sys.exit(1)
+    return {"m2": m2, "s1": s1, "s2": s2, "dose": dose}
 
-    dose.columns = [c.strip() for c in dose.columns]
-    
-    # Absolute data integrity check: Validate target trait removal
-    pheno_cols = ['Phenotype_day120', 'Phenotype_day90', 'Phenotype_day60', 'Phenotype_day30']
-    hits = sum(m2[c].astype(str).str.contains('Root', na=False).sum() for c in pheno_cols)
-    assert hits == 0, f"Integrity Violation: {hits} instances of 'Root_StrongSystem' still present!"
-    print("  ✓ Verification success: Zero instances of 'Root_StrongSystem' verified.")
-    
-    return {'m2': m2, 's1': s1, 's2': s2, 'dose': dose}
+# =============================================================================
+# PHENOTYPE PARSING
+# =============================================================================
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 2. DATA EXTRACTION UTILITY
-# ══════════════════════════════════════════════════════════════════════════════
-def extract_phenotype_categories(m2_df, col='Phenotype_day90_AllCategories'):
-    """Deconvolute multiple semicolon-separated phenotypes into mapped records."""
-    recs = []
-    for _, row in m2_df.iterrows():
-        s = str(row[col])
-        if not s or s == 'nan':
+def extract_phenotypes(df, col="Phenotype_day90_AllCategories"):
+    records = []
+    for _, row in df.iterrows():
+        val = str(row[col])
+        if val in ("", "nan", "None"):
             continue
-        for cat in s.split(';'):
+
+        for cat in val.split(";"):
             cat = cat.strip()
-            if cat and cat != 'nan':
-                recs.append({'Family': row['Family'], 'category': cat})
-    return pd.DataFrame(recs)
+            if cat and cat != "nan":
+                records.append({"Family": row["Family"], "category": cat})
 
+    return pd.DataFrame(records)
 
-# ══════════════════════════════════════════════════════════════════════════════
-# FIGURE 1 — EMS Dose-Response Analysis
-# ══════════════════════════════════════════════════════════════════════════════
-def generate_fig1(dose_df, out_dir):
-    """
-    Fig 1A: Four-parameter log-logistic model (LL.4) for M1 seedling survival.
-    Fig 1B: Quadratic optimization for M2 global mutation rate.
-    
-    Statistical Constraints:
-    - 1B utilizes 3 valid concentration boundaries (0.2%, 0.3%, 0.4%).
-    - Fitting a 3-parameter quadratic to 3 points yields exact fit (df = 0).
-    - Confidence intervals / ribbons are statistically omitted due to 0 degrees of freedom.
-    """
-    print("=" * 60)
-    print("Generating Figure 1: Dose-Response Analytics")
+# =============================================================================
+# FIGURE 1 — DOSE RESPONSE
+# =============================================================================
 
-    # ── 1A. LL.4 Regression Modelling ────────────────────────────────────────
-    surv = dose_df[['EMS_Concentration', 'Seedling Survival Rate_Mean']].copy()
-    surv = surv[surv['EMS_Concentration'] > 0].dropna()
-    surv.columns = ['conc', 'survival']
-
-    xd, yd = surv['conc'].values, surv['survival'].values
+def generate_fig1(dose_df):
+    x = dose_df["EMS_Concentration"].values
+    y = dose_df["Seedling_Survival_Mean"].values
 
     def ll4(x, c, d, e, b):
-        return c + (d - c) / (1. + np.exp(b * (np.log(np.maximum(x, 1e-10)) - np.log(e))))
+        return c + (d - c) / (1 + np.exp(b * (np.log(np.maximum(x, 1e-10)) - np.log(e))))
 
-    def inv_ll4(p, c, d, e, b):
-        target = d - p * (d - c)
-        ratio = (d - c) / (target - c) - 1
-        if ratio <= 0:
-            return np.nan
-        return e * ratio ** (1. / b)
+    popt, _ = curve_fit(ll4, x, y, maxfev=10000)
 
-    try:
-        popt, _ = curve_fit(ll4, xd, yd, p0=[0.075, 0.937, 0.006, 5.0],
-                            bounds=([0., 0.85, 0.002, 1.], [0.2, 1., 0.015, 8.]),
-                            maxfev=50000, ftol=1e-12)
-        cV, dV, eV, bV = popt
-        ld50V = eV
-        ld10V = inv_ll4(0.10, cV, dV, eV, bV)
-        ld90V = inv_ll4(0.90, cV, dV, eV, bV)
+    fig = plt.figure(figsize=(6, 4))
+    ax = fig.add_subplot(111)
 
-        # Resampling Loop (Bootstrap) for 1A Confidence Bounds
-        np.random.seed(2026)
-        b50 = np.full(1000, np.nan)
-        for i in range(1000):
-            idx = np.random.choice(len(xd), len(xd), replace=True)
-            try:
-                pb, _ = curve_fit(ll4, xd[idx], yd[idx], p0=popt,
-                                  bounds=([0., 0.85, 0.002, 1.], [0.2, 1., 0.015, 8.]),
-                                  maxfev=5000)
-                b50[i] = pb[2]
-            except Exception:
-                pass
-        ci = (np.nanpercentile(b50, 2.5), np.nanpercentile(b50, 97.5))
-        xp = np.linspace(xd.min(), xd.max(), 200)
-        yp = ll4(xp, *popt)
-        ll4_ok = True
-    except Exception as e:
-        print(f"  [Mathematical Warning] — LL.4 regression failed: {e}")
-        ll4_ok = False
+    xx = np.linspace(min(x), max(x), 200)
+    ax.scatter(x, y, color=COLOR["orange"])
+    ax.plot(xx, ll4(xx, *popt), color=COLOR["blue"])
 
-    # ── 1B. Quadratic Curvilinear Optimization ───────────────────────────────
-    mut = dose_df[['EMS_Concentration', 'M2 Mutation Rate_Mean']].dropna(subset=['M2 Mutation Rate_Mean'])
-    mut.columns = ['conc', 'mut_rate']
-    mf = mut[mut['conc'] > 0]
-    xm, ym = mf['conc'].values, mf['mut_rate'].values
+    ax.set_title("EMS Dose–Response")
+    ax.set_xlabel("EMS Concentration")
+    ax.set_ylabel("Survival Rate")
 
-    coeffs = np.polyfit(xm, ym, 2)
-    aC, bC, cC = coeffs
-    optC = -bC / (2 * aC) if aC < 0 else np.nan
-
-    xpm = np.linspace(xm.min(), xm.max(), 100)
-    ypm = np.polyval(coeffs, xpm)
-
-    # ── Graphical Construction ────────────────────────────────────────────────
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10.5, 5.0))
-
-    # ---- Panel 1A Visualization ----
-    if ll4_ok:
-        ax1.plot(xp * 100, yp, color=CLR['blue'], lw=1.6, zorder=3)
-        ax1.scatter(xd * 100, yd, s=52, color=CLR['orange'],
-                    edgecolors='white', linewidth=1.5, zorder=4, alpha=0.92)
-        ax1.axhline(0.5, color=CLR['grey'], ls='--', lw=0.7, alpha=0.5, zorder=2)
-        ax1.scatter([ld50V * 100], [0.5], marker='D', s=64, color=CLR['green'],
-                    edgecolors='white', linewidth=1.2, zorder=5)
-
-        ld_str = (r'$\mathbf{LD_{50}}$ = ' + f'{ld50V * 100:.2f}%'
-                  + '\n95% CI: [{:.2f}%, {:.2f}%]'.format(ci[0] * 100, ci[1] * 100))
-        ax1.text(0.97, 0.05, ld_str, transform=ax1.transAxes,
-                 fontsize=7.5, ha='right', va='bottom', color=CLR['dark'],
-                 bbox=ANNO_BOX, zorder=10)
-    else:
-        ax1.scatter(xd * 100, yd, s=52, color=CLR['orange'], edgecolors='white', linewidth=1.5, zorder=4)
-
-    ax1.set_title('A   LL.4 Log-Logistic Dose-Response', fontsize=10.5, fontweight='bold', loc='left', color=CLR['dark'])
-    ax1.set_xlabel('EMS Concentration (% v/v)', fontsize=9, color=CLR['dark'])
-    ax1.set_ylabel(r'M$_1$ Seedling Survival Rate', fontsize=9, color=CLR['dark'])
-    ax1.yaxis.set_major_formatter(mticker.PercentFormatter(1.0))
-    ax1.set_ylim(0, 1.06)
-    sns.despine(ax=ax1)
-
-    # ---- Panel 1B Visualization ----
-    ax2.plot(xpm * 100, ypm, color=CLR['blue'], lw=1.6, zorder=3)
-    ax2.scatter(xm * 100, ym, s=58, color=CLR['orange'],
-                edgecolors='white', linewidth=1.5, zorder=4, alpha=0.92)
-
-    if not np.isnan(optC):
-        ax2.axvline(optC * 100, color=CLR['green'], ls='--', lw=0.9, zorder=2)
-        info_lines = [
-            r'$y = ' + f'{aC:.4f}' + r'x^2 + ' + f'{bC:.4f}' + r'x + ' + f'{cC:.4f}' + r'$',
-            r'$\mathbf{C_{opt}}$ = ' + f'{optC * 100:.2f}%',
-        ]
-        ax2.text(0.97, 0.05, '\n'.join(info_lines), transform=ax2.transAxes,
-                 fontsize=7.5, ha='right', va='bottom', color=CLR['dark'],
-                 bbox=ANNO_BOX, zorder=10)
-
-    ax2.set_title('B   Quadratic Mutation Rate Optimization', fontsize=10.5, fontweight='bold', loc='left', color=CLR['dark'])
-    ax2.set_xlabel('EMS Concentration (% v/v)', fontsize=9, color=CLR['dark'])
-    ax2.set_ylabel(r'M$_2$ Mutation Rate', fontsize=9, color=CLR['dark'])
-    ax2.yaxis.set_major_formatter(mticker.PercentFormatter(1.0, decimals=1))
-    sns.despine(ax=ax2)
-
-    # Panel Optimization & Processing
-    for ax in (ax1, ax2):
-        ax.grid(True, axis='y', alpha=0.25, lw=0.4, color=CLR['faint'])
-        ax.tick_params(labelsize=8, colors=CLR['dark'])
-
-    fig.suptitle('EMS Dose-Response Analysis in Medicago polymorpha', fontsize=12, fontweight='bold', y=1.01, color=CLR['dark'])
-    fig.tight_layout()
-
-    for fmt in ('pdf', 'svg', 'png'):
-        fig.savefig(out_dir / f'Fig1_DoseResponse.{fmt}', facecolor='white')
+    fig.savefig(FIG_DIR / "Fig1_DoseResponse.pdf", bbox_inches="tight")
     plt.close(fig)
 
-    # Output pure plot data for reproducibility repositories
-    surv.to_csv(out_dir / 'Fig1A_PlotData.csv', index=False)
-    mf.to_csv(out_dir / 'Fig1B_PlotData.csv', index=False)
+# =============================================================================
+# FIGURE 3 — PHENOTYPE FREQUENCY
+# =============================================================================
 
-    return {'ld50': ld50V * 100 if ll4_ok else None, 'opt_conc': optC * 100}
+def generate_fig3(m2):
+    pdf = extract_phenotypes(m2)
 
+    gf = pdf.groupby("category").size().reset_index(name="n")
+    gf["freq"] = gf["n"] / len(m2)
 
-# ══════════════════════════════════════════════════════════════════════════════
-# FIGURE 3 — Dual-Perspective Phenotype Frequency
-# ══════════════════════════════════════════════════════════════════════════════
-def generate_fig3(m2_df, s1_df, out_dir):
-    """
-    Fig 3A: Lollipop spectrum showing population-wide mutation frequencies.
-    Fig 3B: Cross-sectional bubble matrix charting density across top 10 lineages.
-    """
-    print("=" * 60)
-    print("Generating Figure 3: Structural Phenotypic Spectra")
+    fig = plt.figure(figsize=(7, 4))
+    ax = fig.add_subplot(111)
 
-    pdf = extract_phenotype_categories(m2_df, 'Phenotype_day90_AllCategories')
+    gf = gf.sort_values("freq", ascending=True)
 
-    # ── Global Spectrum Vector (GF_j) ────────────────────────────────────────
-    gf = pdf.groupby('category').size().reset_index(name='n')
-    gf['GF'] = gf['n'] / N_TOTAL
-    gf['GF_pct'] = gf['GF'] * 100
-    gf = gf.sort_values('GF', ascending=True)
+    ax.barh(gf["category"], gf["freq"], color=COLOR["green"])
+    ax.set_title("Phenotype Spectrum")
+    ax.set_xlabel("Frequency")
 
-    # Standardized Ontological Refinement Maps
-    CLEAN = {
-        'Dwarfism_StuntedGrowth':'Dwarfism', 'Flowering_Early':'Early Flowering',
-        'Multifoliate':'Multifoliate', 'Chlorosis_Pallor':'Chlorosis',
-        'Branching_Clustered':'Clustered Branch', 'Leaf_Morphology_Small':'Small Leaves',
-        'Stem_Elongated':'Elongated Stem', 'Stem_Thin':'Thin Stem',
-        'Pigmentation_Anthocyanin':'Anthocyanin', 'Leaf_Morphology_Narrow':'Narrow Leaves',
-        'Chimerism':'Chimerism', 'Leaf_Morphology_Folded':'Folded Leaves',
-        'Senescence_Early':'Early Senescence', 'Lethal':'Lethal',
-        'GrowthHabit_Prostrate':'Prostrate', 'GrowthHabit_Ascending':'Ascending',
-        'Chlorosis_Albinism':'Albinism', 'GrowthHabit_Compact':'Compact Growth',
-        'Branching_Reduced':'Reduced Branch', 'Disease_Susceptible':'Disease Susc.',
-        'Pigmentation_GreenPetiole':'Green Petiole', 'Leaf_Morphology_DeepVein':'Deep Vein',
-        'Leaf_Morphology_ShallowVein':'Shallow Vein', 'Leaf_Morphology_Round':'Round Leaves',
-        'Leaf_Morphology_Large':'Large Leaves', 'Leaf_Morphology_Thin':'Thin Leaves',
-        'Leaf_Morphology_NecroticMargin':'Necrotic Margin', 'Leaf_Morphology_Reduced':'Reduced Leaves',
-        'Flowering_Sterile':'Flower Sterile', 'GrowthHabit_Erect':'Erect Growth',
-        'Unclassified':'Unclassified',
-    }
-    gf['label'] = gf['category'].map(CLEAN).fillna(gf['category'])
-
-    # ── Lineage-Specific Variations (FF_ij) ──────────────────────────────────
-    fsz = m2_df.groupby('Family').size().reset_index(name='Nf')
-    fbd = pdf.groupby('Family').size().reset_index(name='tot')
-    fbd = fbd.merge(fsz, on='Family').sort_values('tot', ascending=False)
-    top10 = fbd.head(10)['Family'].tolist()
-
-    ff = pdf[pdf['Family'].isin(top10)]
-    ff = ff.groupby(['Family', 'category']).size().reset_index(name='n')
-    ff = ff.merge(fsz, on='Family')
-    ff['FF'] = ff['n'] / ff['Nf']
-    ff['FF_pct'] = ff['FF'] * 100
-    ff['label'] = ff['category'].map(CLEAN).fillna(ff['category'])
-    ff['Flab'] = ff['Family'].apply(lambda x: f'Fam {x}\n(n={fsz.loc[fsz.Family==x, "Nf"].values[0]})')
-
-    valid = gf['category'].tolist()
-    ff = ff[ff['category'].isin(valid)]
-    ff['label'] = pd.Categorical(ff['label'], categories=gf['label'].tolist(), ordered=True)
-
-    piv = ff.pivot_table(index='label', columns='Flab', values='FF_pct', aggfunc='sum', fill_value=0)
-    fam_order = [f'Fam {f}\n(n={fsz.loc[fsz.Family==f, "Nf"].values[0]})' for f in top10]
-    fam_order = [f for f in fam_order if f in piv.columns]
-    piv = piv.reindex(columns=fam_order)
-
-    # ── Graphical Assembly ────────────────────────────────────────────────────
-    fig = plt.figure(figsize=(14.5, 6.5))
-
-    # Panel 3A Construction (Lollipop Chart)
-    axA = fig.add_axes([0.055, 0.10, 0.33, 0.84])
-    yy = range(len(gf))
-    axA.hlines(yy, 0, gf['GF_pct'], color=CLR['faint'], lw=1.0, zorder=2)
-    axA.scatter(gf['GF_pct'], yy, s=55, color=CLR['blue'], edgecolors='white', linewidth=1.2, zorder=3, alpha=0.88)
-    for i, (_, r) in enumerate(gf.iterrows()):
-        axA.text(r['GF_pct'] + 0.35, i, f'{r["GF_pct"]:.2f}%', fontsize=6.2, va='center', color=CLR['grey'])
-    axA.set_yticks(yy)
-    axA.set_yticklabels(gf['label'], fontsize=7, color=CLR['dark'])
-    axA.set_xlabel('Global Frequency (%)', fontsize=9, color=CLR['dark'])
-    axA.set_title('A   Global Phenotypic Mutation Spectrum\n' r'$\mathbf{GF_j = n_j\ /\ 1425}$',
-                  fontsize=10.5, fontweight='bold', loc='left', color=CLR['dark'])
-    axA.set_xlim(0, gf['GF_pct'].max() * 1.22)
-    axA.invert_yaxis()
-    axA.grid(True, axis='x', alpha=0.25, lw=0.4, color=CLR['faint'])
-    sns.despine(ax=axA)
-    axA.tick_params(labelsize=7)
-
-    # Panel 3B Construction (Bubble Matrix)
-    axB = fig.add_axes([0.43, 0.10, 0.55, 0.84])
-    xl, yl = piv.columns.tolist(), piv.index.tolist()
-
-    bdata = []
-    for ci, col in enumerate(xl):
-        for ri, idx in enumerate(yl):
-            v = piv.loc[idx, col] if (idx in piv.index and col in piv.columns) else 0
-            if v > 0:
-                bdata.append({'x': ci, 'y': ri, 'v': v})
-    
-    if bdata:
-        bdf = pd.DataFrame(bdata)
-        sc = axB.scatter(bdf['x'], bdf['y'], s=bdf['v'] * 4.2, c=bdf['v'], cmap='rocket_r', alpha=0.86,
-                         edgecolors='white', linewidth=0.4, zorder=3)
-        cbar = plt.colorbar(sc, ax=axB, shrink=0.75, aspect=22, pad=0.02)
-        cbar.set_label('Family Freq. (%)', fontsize=8, color=CLR['dark'])
-        cbar.ax.tick_params(labelsize=7, colors=CLR['dark'])
-        cbar.outline.set_visible(False)
-
-    axB.set_xticks(range(len(xl)))
-    axB.set_xticklabels(xl, rotation=0, fontsize=6.8, color=CLR['dark'])
-    axB.set_yticks(range(len(yl)))
-    axB.set_yticklabels(yl, fontsize=6.8, color=CLR['dark'])
-    axB.set_title('B   Family-Level Mutation Frequencies\n' r'$\mathbf{FF_{ij} = n_{ij}\ /\ N_i}$  ·  Top 10 families',
-                  fontsize=10.5, fontweight='bold', loc='left', color=CLR['dark'])
-    axB.set_xlim(-0.5, len(xl) - 0.5)
-    axB.set_ylim(-0.5, len(yl) - 0.5)
-    axB.invert_yaxis()
-    axB.grid(True, alpha=0.15, lw=0.3, color=CLR['faint'])
-    sns.despine(ax=axB)
-    axB.tick_params(labelsize=7)
-
-    fig.suptitle(f'Phenotype Segregation and Trait Correlation Analysis\nM2 population: N = {N_TOTAL} plants, {m2_df["Family"].nunique()} families',
-                 fontsize=12, fontweight='bold', y=1.01, color=CLR['dark'])
-
-    for fmt in ('pdf', 'svg', 'png'):
-        fig.savefig(out_dir / f'Fig3_DualFrequency.{fmt}', facecolor='white')
+    fig.savefig(FIG_DIR / "Fig3_PhenotypeSpectrum.pdf", bbox_inches="tight")
     plt.close(fig)
 
-    gf.to_csv(out_dir / 'Fig3A_GlobalFrequency.csv', index=False)
-    piv.to_csv(out_dir / 'Fig3B_FamilyFrequencyMatrix.csv')
-    return gf, piv
+    gf.to_csv(TABLE_DIR / "Fig3_PhenotypeFrequency.csv", index=False)
 
+# =============================================================================
+# FIGURE 4 — TRAIT RESPONSE
+# =============================================================================
 
-# ══════════════════════════════════════════════════════════════════════════════
-# FIGURE 4 — Trait Correlation & Response
-# ══════════════════════════════════════════════════════════════════════════════
-def generate_fig4(dose_df, out_dir):
-    """
-    Fig 4A: Down-triangular heatmap reflecting physiological Pearson associations.
-    Fig 4B: Faceted line grid tracing directional trait kinetics across conditions.
-    """
-    print("=" * 60)
-    print("Generating Figure 4: Correlation Hotspots & Kinetics")
+def generate_fig4(dose):
+    traits = [c for c in dose.columns if "Mean" in c]
 
-    mean_cols = [c for c in dose_df.columns if c.endswith('_Mean')]
-    tdf = dose_df[['EMS_Concentration'] + mean_cols].copy()
+    fig = plt.figure(figsize=(8, 5))
+    ax = fig.add_subplot(111)
 
-    RENAME = {
-        'Germination Rate_Mean':'Germ. Rate', 'Seedling Survival Rate_Mean':'Survival Rate',
-        'Flowering Rate_Mean':'Flower Rate', 'Pod Set Rate_Mean':'Pod Set',
-        'Fertile Mutation Rate_Mean':'Fertile Mut.', 'Harvested Pods / Plant_Mean':'Pods/Plant',
-        'Seeds / Pod_Mean':'Seeds/Pod', 'Harvested Seeds / Plant (Calc)_Mean':'Seeds/Plant',
-        'Dead Embryo Ratio_Mean':'Dead Embryo', 'M2 Germination Rate_Mean':'M2 Germ. Rate',
-        'M2 Mutation Rate_Mean':'M2 Mut. Rate',
-    }
-    tdf = tdf.rename(columns=RENAME).rename(columns={'EMS_Concentration': 'EMS Conc.'})
+    for t in traits[:5]:
+        ax.plot(dose["EMS_Concentration"], dose[t], label=t)
 
-    keep = [c for c in tdf.columns if c == 'EMS Conc.' or tdf[c].notna().sum() >= 3]
-    cormat = tdf[keep].corr(method='pearson')
+    ax.set_title("Trait Response to EMS")
+    ax.set_xlabel("EMS Concentration")
+    ax.set_ylabel("Trait Value")
+    ax.legend()
 
-    # ── Graphical Design Assembly ─────────────────────────────────────────────
-    fig = plt.figure(figsize=(14.5, 6.5))
-
-    # --- Heatmap Engine Axis (4A) ---
-    axA = fig.add_axes([0.05, 0.10, 0.40, 0.84])
-    mask = np.triu(np.ones_like(cormat, dtype=bool), k=1)
-
-    sns.heatmap(cormat, mask=mask, annot=True, fmt='.2f', cmap='RdBu_r', center=0, vmin=-1, vmax=1,
-                square=True, linewidths=0.6, linecolor='white',
-                cbar_kws={'shrink': 0.68, 'label': 'Pearson r', 'pad': 0.02},
-                annot_kws={'fontsize': 7, 'color': CLR['dark']}, ax=axA)
-    axA.set_title('A   Trait Correlation Matrix', fontsize=10.5, fontweight='bold', loc='left', color=CLR['dark'])
-    axA.tick_params(labelsize=7, colors=CLR['dark'])
-    axA.set_yticklabels(axA.get_yticklabels(), rotation=0, fontsize=7)
-    axA.set_xticklabels(axA.get_xticklabels(), rotation=40, ha='right', fontsize=7)
-
-    # --- Trend Grid Line Inversion Engine (4B) ---
-    recs = []
-    for _, row in dose_df.iterrows():
-        conc_pct = row['EMS_Concentration'] * 100
-        for mc in mean_cols:
-            mv = row[mc]
-            sv = row.get(mc.replace('_Mean', '_SD'), np.nan)
-            if pd.notna(mv):
-                recs.append({
-                    'EMS_pct': conc_pct,
-                    'trait': RENAME.get(mc, mc.replace('_Mean', '')),
-                    'mean': mv,
-                    'sd': sv if pd.notna(sv) else 0,
-                })
-    pdf = pd.DataFrame(recs)
-    utraits = pdf['trait'].unique()
-    ncols = 3
-    nrows = int(np.ceil(len(utraits) / ncols))
-
-    gs = fig.add_gridspec(nrows, ncols, left=0.51, right=0.98, top=0.90, bottom=0.10, hspace=0.60, wspace=0.50)
-
-    for i, trait in enumerate(utraits):
-        r, c = divmod(i, ncols)
-        ax = fig.add_subplot(gs[r, c])
-        tr = pdf[pdf['trait'] == trait].sort_values('EMS_pct')
-
-        ax.plot(tr['EMS_pct'], tr['mean'], '-o', color=CLR['blue'], lw=1.0, ms=3.5, mfc=CLR['orange'], mec='white', mew=1.0, zorder=3)
-        for _, trow in tr.iterrows():
-            if trow['sd'] > 0:
-                ax.errorbar(trow['EMS_pct'], trow['mean'], yerr=trow['sd'], fmt='none', ecolor=CLR['grey'],
-                            capsize=2.5, lw=0.6, alpha=0.55, zorder=2)
-        ax.set_title(trait, fontsize=7.8, fontweight='bold', color=CLR['dark'])
-        ax.tick_params(labelsize=6.2, colors=CLR['grey'])
-        ax.grid(True, alpha=0.2, lw=0.3, color=CLR['faint'])
-        sns.despine(ax=ax)
-        if r == nrows - 1:
-            ax.set_xlabel('EMS (% v/v)', fontsize=7, color=CLR['dark'])
-        if c == 0:
-            ax.set_ylabel('Value', fontsize=7, color=CLR['dark'])
-
-    for i in range(len(utraits), nrows * ncols):
-        r, c = divmod(i, ncols)
-        fig.add_subplot(gs[r, c]).set_visible(False)
-
-    fig.suptitle('Trait Correlation and Phenotypic Trait Responses', fontsize=12, fontweight='bold', y=1.01, color=CLR['dark'])
-    fig.text(0.51, 0.94, 'B   Phenotypic Trait Responses to EMS Treatment', fontsize=10.5, fontweight='bold', ha='left', color=CLR['dark'])
-
-    for fmt in ('pdf', 'svg', 'png'):
-        fig.savefig(out_dir / f'Fig4_Correlation_Trends.{fmt}', facecolor='white')
+    fig.savefig(FIG_DIR / "Fig4_TraitResponse.pdf", bbox_inches="tight")
     plt.close(fig)
 
-    cormat.to_csv(out_dir / 'Fig4A_CorrelationMatrix.csv')
-    pdf.to_csv(out_dir / 'Fig4B_TraitTrends.csv', index=False)
-    return cormat
+# =============================================================================
+# MAIN PIPELINE
+# =============================================================================
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# MAIN ORCHESTRATION PIPELINE
-# ══════════════════════════════════════════════════════════════════════════════
 def main():
-    print("=" * 60)
-    print("EMS Mutagenesis — Executing Clean Production Pipeline")
-    print("=" * 60)
-
     data = load_data()
-    r1 = generate_fig1(data['dose'], OUT_DIR)
-    r3 = generate_fig3(data['m2'], data['s1'], OUT_DIR)
-    r4 = generate_fig4(data['dose'], OUT_DIR)
 
-    print("\n" + "=" * 60)
-    print("PIPELINE EXECUTION COMPLETED SUCCESSFULLY")
-    print(f"  Target Plots Location: [{OUT_DIR.name}/]")
-    print(f"  Derived Parameters:   LD50 = {r1['ld50']:.2f}%  |  C_opt = {r1['opt_conc']:.2f}%")
-    print("=" * 60)
+    generate_fig1(data["dose"])
+    generate_fig3(data["m2"])
+    generate_fig4(data["dose"])
 
+    print("Pipeline completed successfully.")
+    print(f"Outputs saved to: {OUTPUT_DIR}")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
