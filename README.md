@@ -126,6 +126,53 @@ Collectively, this analytical design prioritizes robustness to unbalanced sampli
 
 ---
 
+## Computational Implementation and Versioning
+
+This study employs a dual-implementation analytical framework to ensure methodological reproducibility and cross-validation of results across programming environments.
+
+### Version V2 — R-based Analytical Pipeline
+
+The original implementation (V2) was developed in R and was used for primary statistical validation and figure prototyping. This version includes:
+
+- Exploratory data analysis and initial phenotype classification
+- Core statistical visualization using `ggplot2`
+- Early-stage implementation of phenotype frequency mapping
+- Supplementary figure construction (pre-publication iteration)
+
+The V2 pipeline serves as the foundational analytical layer for statistical hypothesis formulation.
+
+---
+
+### Version V3 — Python-based Production Pipeline
+
+The current implementation (V3) is a fully integrated Python-based production pipeline designed for reproducible publication-grade figure generation and automated statistical computation.
+
+Key improvements over V2 include:
+
+- Environment-agnostic directory resolution using `pathlib`
+- Automated EMS dose–response modeling (LL.4 nonlinear regression)
+- Bootstrap-based parameter uncertainty estimation (n = 1000)
+- Fully reproducible Supplementary Table and Figure generation
+- Structured pipeline orchestration via modular function design
+- Enhanced computational efficiency and error handling robustness
+
+V3 serves as the final analytical implementation used for all figures and quantitative outputs included in the manuscript.
+
+---
+
+### Cross-Version Consistency
+
+Both V2 (R) and V3 (Python) pipelines were independently validated to ensure consistency of:
+
+- Phenotype frequency distributions
+- Family-level mutation burden estimates
+- Dose–response curve fitting parameters
+- Global phenotypic spectrum structure
+
+Any minor numerical deviations arise from differences in optimization solvers and floating-point implementations between R and Python ecosystems, and do not affect biological interpretation.
+
+---
+
 ## Outputs
 
 The pipeline generates the following assets:
